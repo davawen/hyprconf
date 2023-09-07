@@ -31,9 +31,12 @@ peg::parser!{
     rule vec2() -> String
         = "[" _ a:float() _ "," _ b:float() _ "]" { format!("{a} {b}") }
 
+    rule ident() -> String
+        = slice_string(<['a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-' | '.' | ':']+>)
+
     rule hyprstr() -> String
         = slice_string(<"\"" (!"\"" [_])* "\"">)
-        / slice_string(<['a'..='z' | 'A'..='Z' | '_']+>)
+        / ident()
 
     // #ff0000..#00ff00..#0000ff(10deg)
 
@@ -46,19 +49,16 @@ peg::parser!{
     rule empty() -> String
         = "_" { String::new() }
 
-    rule ident() -> String
-        = slice_string(<['a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '.' | ':']+>)
-
     rule set_variable() -> String
         = i:ident() _ "=" _ v:value() { format!("{i} = {v}") }
 
-    rule keyword(separator: char) -> String
-        = k:ident() __ params:((_ v:(empty() / value()) _ { v }) ** ",") {
+    rule keyword(arg: rule<String>, separator: char) -> String
+        = k:ident() __ params:((_ v:arg() _ { v }) ** ",") {
             format!("{k}{separator}{}", params.join(","))
         }
 
-    // exec swaylock
-    // exec = swaylock
+    rule dispatcher(separator: char) -> String
+        = keyword(<empty() / value()>, separator)
 
     // CTRL+SHIFT+Q
 
@@ -68,7 +68,7 @@ peg::parser!{
     pub rule bind() -> String
         = "bind" flags:$(['l' | 'r' | 'e' | 'n' | 'm' | 't']*) __
             modifiers:(m:modifier() _ "+" _ { m })* key:ident() __
-            actions:((_ k:keyword(',') _ { k }) ++ ";") { 
+            actions:((_ k:dispatcher(',') _ { k }) ++ ";") { 
             actions.into_iter().map(|action|
                 format!("bind{flags} = {},{key},{action}", modifiers.join("+"))
             ).collect::<Vec<_>>().join("\n")
